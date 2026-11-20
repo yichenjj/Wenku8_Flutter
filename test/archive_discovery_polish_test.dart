@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -324,4 +325,46 @@ void main({Capture? capture}) {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+testWidgets('mouse wheel steps exactly one book per notch without shift',
+    (tester) async {
+  _view(tester);
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: novelTheme(Brightness.light),
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: ArchiveFileCarousel(
+              books: _books(975000, 10),
+              onOpen: (_, _) {},
+              animateEntrance: true,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+
+  final before = _scene(tester).debugFocus.round();
+
+  final pointer = TestPointer(1, PointerDeviceKind.mouse);
+  pointer.hover(tester.getCenter(find.byKey(_railKey)));
+  // One notch carries ~120 px — several book widths — yet steps one book.
+  await tester.sendEventToBinding(pointer.scroll(const Offset(0, 120)));
+  await tester.pumpAndSettle();
+  expect(_scene(tester).debugFocus.round(), before + 1);
+
+  // Wheeling back inside the notch cooldown must still step (the cooldown
+  // folds bursts of one notch, not user intent across notches).
+  await tester.sendEventToBinding(
+    pointer.scroll(const Offset(0, -120), timeStamp: const Duration(seconds: 1)),
+  );
+  await tester.pumpAndSettle();
+  expect(_scene(tester).debugFocus.round(), before);
+
+  expect(tester.takeException(), isNull);
+  await tester.pumpWidget(const SizedBox.shrink());
+});
 }

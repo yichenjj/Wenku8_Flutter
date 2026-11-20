@@ -151,6 +151,29 @@ class _ArchiveFileCarouselState extends State<ArchiveFileCarousel>
 
   void _step(int delta) =>
       unawaited(_centre((_targetIndex ?? _active.value) + delta));
+
+  /// Plain mouse wheel steps one book per notch — no Shift required. The
+  /// resolver registration keeps the outer vertical feed from also scrolling,
+  /// and a short cooldown turns trackpad bursts into the same single step.
+  static const _wheelCooldown = Duration(milliseconds: 140);
+  Duration? _lastWheelStep;
+  void _handleWheelSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || widget.books.length < 2) return;
+    final delta = event.scrollDelta.dy == 0
+        ? event.scrollDelta.dx
+        : event.scrollDelta.dy;
+    if (delta == 0) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      if (_lastWheelStep != null &&
+          event.timeStamp - _lastWheelStep! < _wheelCooldown) {
+        return;
+      }
+      _lastWheelStep = event.timeStamp;
+      final target = (_targetIndex ?? _active.value) + (delta > 0 ? 1 : -1);
+      unawaited(_centre(target.clamp(0, widget.books.length - 1)));
+    });
+  }
+
   void _open(int index) {
     if (widget.books.isEmpty) return;
     _finishEntrance();
@@ -225,50 +248,54 @@ class _ArchiveFileCarouselState extends State<ArchiveFileCarousel>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
-                      height: rowHeight,
-                      child: NotificationListener<ScrollNotification>(
-                        onNotification: (notification) {
-                          if (notification is ScrollStartNotification &&
-                              notification.dragDetails != null) {
-                            _finishEntrance();
-                            _targetIndex = null;
-                            _command++;
-                            _hapticGesture = true;
-                            _lastDetent = _pose.logicalFocus.round();
-                          } else if (notification is ScrollStartNotification &&
-                              _targetIndex != null) {
-                            _hapticGesture = true;
-                          } else if (notification is ScrollEndNotification) {
-                            _hapticGesture = false;
-                          }
-                          return false;
-                        },
-                        child: Scrollable(
-                          key: const ValueKey('archive-file-carousel'),
-                          controller: _scroll,
-                          axisDirection: AxisDirection.right,
-                          physics: widget.books.length == 1
-                              ? const NeverScrollableScrollPhysics()
-                              : _ArchiveSnapPhysics(pose: _pose),
-                          viewportBuilder: (context, offset) => _ShelfRow(
-                            offset: offset,
-                            pose: _pose,
-                            spine: spine,
-                            cover: cover,
-                            height: height,
-                            dark: dark,
-                            children: [
-                              for (var i = 0; i < _pose.poolCount; i++)
-                                _volume(
-                                  context,
-                                  widget.books[_pose.bookIndex(i)],
-                                  i,
-                                  spine,
-                                  cover,
-                                  height,
-                                ),
-                            ],
+                    Listener(
+                      onPointerSignal: _handleWheelSignal,
+                      child: SizedBox(
+                        height: rowHeight,
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: (notification) {
+                            if (notification is ScrollStartNotification &&
+                                notification.dragDetails != null) {
+                              _finishEntrance();
+                              _targetIndex = null;
+                              _command++;
+                              _hapticGesture = true;
+                              _lastDetent = _pose.logicalFocus.round();
+                            } else if (notification
+                                    is ScrollStartNotification &&
+                                _targetIndex != null) {
+                              _hapticGesture = true;
+                            } else if (notification is ScrollEndNotification) {
+                              _hapticGesture = false;
+                            }
+                            return false;
+                          },
+                          child: Scrollable(
+                            key: const ValueKey('archive-file-carousel'),
+                            controller: _scroll,
+                            axisDirection: AxisDirection.right,
+                            physics: widget.books.length == 1
+                                ? const NeverScrollableScrollPhysics()
+                                : _ArchiveSnapPhysics(pose: _pose),
+                            viewportBuilder: (context, offset) => _ShelfRow(
+                              offset: offset,
+                              pose: _pose,
+                              spine: spine,
+                              cover: cover,
+                              height: height,
+                              dark: dark,
+                              children: [
+                                for (var i = 0; i < _pose.poolCount; i++)
+                                  _volume(
+                                    context,
+                                    widget.books[_pose.bookIndex(i)],
+                                    i,
+                                    spine,
+                                    cover,
+                                    height,
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
