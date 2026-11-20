@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -23,20 +25,56 @@ abstract final class LocalPlatform {
       channel.invokeMapMethod<Object?, Object?>('importLegacyData');
   static Future<void> shareText(String text) =>
       channel.invokeMethod<void>('shareText', {'text': text});
-  static Future<bool> saveBookImage(Uint8List bytes, String name) async =>
-      await channel.invokeMethod<bool>('saveBookImage', {
-        'bytes': bytes,
-        'name': name,
-      }) ??
-      false;
-  static Future<void> shareImage(Uint8List bytes, String name) =>
-      channel.invokeMethod<void>('shareImage', {'bytes': bytes, 'name': name});
-  static Future<bool> exportImage(Uint8List bytes, String name) async =>
-      await channel.invokeMethod<bool>('exportImage', {
-        'bytes': bytes,
-        'name': name,
-      }) ??
-      false;
+  static Future<bool> saveBookImage(Uint8List bytes, String name) async {
+    if (!android) return _saveImageFile(bytes, name);
+    return await channel.invokeMethod<bool>('saveBookImage', {
+          'bytes': bytes,
+          'name': name,
+        }) ??
+        false;
+  }
+
+  static Future<void> shareImage(Uint8List bytes, String name) async {
+    if (!android) {
+      // Desktop has no share sheet; persist the image instead.
+      await _saveImageFile(bytes, name);
+      return;
+    }
+    await channel.invokeMethod<void>('shareImage', {'bytes': bytes, 'name': name});
+  }
+
+  static Future<bool> exportImage(Uint8List bytes, String name) async {
+    if (!android) return _saveImageFile(bytes, name);
+    return await channel.invokeMethod<bool>('exportImage', {
+          'bytes': bytes,
+          'name': name,
+        }) ??
+        false;
+  }
+
+  /// Desktop fallback for image saving: write straight into the user's
+  /// pictures directory instead of opening a document dialog.
+  static Future<bool> _saveImageFile(Uint8List bytes, String name) async {
+    try {
+      final home = Platform.environment['HOME'];
+      if (home == null || home.isEmpty) return false;
+      final directory = Directory(
+        Platform.environment['XDG_PICTURES_DIR'] ?? '$home/Pictures',
+      );
+      await directory.create(recursive: true);
+      final safe = name.replaceAll(RegExp(r'[/\\\0]'), '_');
+      final extension = bytes.length >= 2 &&
+              bytes[0] == 0xFF &&
+              bytes[1] == 0xD8
+          ? 'jpg'
+          : 'png';
+      final file = File('${directory.path}/$safe.$extension');
+      await file.writeAsBytes(bytes, flush: true);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
   static final Set<Object> _awakeOwners = {};
   static const readerControls = MethodChannel(
     'org.mewx.wenku8/reader_controls',

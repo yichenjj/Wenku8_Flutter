@@ -87,6 +87,28 @@ flutter build apk --release --target-platform android-arm64
 
 公开源码与上游一样，不附带文库 API 实现。直接构建可用于本地导入与阅读，文库联网功能不可用；正式 APK 由维护者单独提供原运行库，功能不受这项源码整理影响。
 
+### Linux 桌面版
+
+Linux 客户端把 v1.30 中继协议完整移植进了 Dart（`lib/legacy/`），书城浏览、账号登录与在线阅读与 Android 同源。构建步骤：
+
+```sh
+# 1. 桌面依赖（Arch 示例）：gtk3 ninja clang cmake pkgconf
+flutter pub get
+
+# 2. 注入 API 运行库（可选；缺失时自动退回演示模式）
+#    从官方 APK 提取 lib/<abi>/libcpp.so 后：
+python3 linux/patch_libcpp.py libcpp.so linux/proprietary/libcpp_patched.so
+
+# 3. 构建并安装
+flutter build linux --release
+./linux/install.sh   # 安装到 ~/.local/opt 并创建启动器
+```
+
+- 运行库补丁会把 bionic 符号版本剥掉，由应用可执行文件导出的桩（`linux/runner/android_compat.c`）补齐，密码学版本签名在进程内通过 FFI 计算。
+- 渲染默认走 Skia（Impeller 在部分 Wayland 合成器上不跟随窗口尺寸），EGL 默认锁回 Mesa 核显以规避损坏的 NVIDIA 驱动栈；均可用 `WENKU8_IMPELLER=1` / `WENKU8_NVIDIA_EGL=1` 退出。
+- 听书（TTS 播放）暂无 Linux 后端；PDF/RTF 本地导入仍在 Android 侧。
+
+
 ### GitHub Actions
 
 - [Flutter Android](https://github.com/mikufoxxx/Wenku8_Flutter/actions/workflows/flutter-ci.yml)：代码检查、自动测试与独立源码预览包，不包含文库 API。
