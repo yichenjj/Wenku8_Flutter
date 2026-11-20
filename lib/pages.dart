@@ -2587,8 +2587,10 @@ class SettingsPage extends StatelessWidget {
       ),
     ),
     const SizedBox(height: 24),
-    const FrameRateOptions(),
-    const SizedBox(height: 24),
+    if (LocalPlatform.android) ...[
+      const FrameRateOptions(),
+      const SizedBox(height: 24),
+    ],
     ContentPanel(
       key: const ValueKey('settings-performance'),
       onTap: () => pushNovelPage<void>(

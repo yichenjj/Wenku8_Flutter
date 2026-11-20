@@ -58,9 +58,14 @@ void main() {
         }
     }
     vec3 center = glassPoint(position);
-    float aa = max(fwidth(center.z), 1.0);
-    vec2 dx = dFdx(center.xy) * 0.25;
-    vec2 dy = dFdy(center.xy) * 0.25;
+    // SkSL exposes no GPU quad derivatives. Explicit one-pixel forward
+    // differences reproduce fwidth/dFdx/dFdy on every backend; glassPoint is
+    // pure ALU, so the two extra evaluations stay cheap.
+    vec3 right = glassPoint(position + vec2(1.0, 0.0));
+    vec3 down = glassPoint(position + vec2(0.0, 1.0));
+    float aa = max(abs(right.z - center.z) + abs(down.z - center.z), 1.0);
+    vec2 dx = (right.xy - center.xy) * 0.25;
+    vec2 dy = (down.xy - center.xy) * 0.25;
     if (any(greaterThanEqual(distance, uRect.zw * 0.5))) {
         fragColor = vec4(0.0);
         return;
