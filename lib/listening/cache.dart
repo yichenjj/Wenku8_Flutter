@@ -76,7 +76,13 @@ class SpeechAudioCache implements SpeechAudioSource {
 
   @override
   Future<List<SpeechVoice>> offlineVoices() => _native(() async {
-    final engines = await system.invokeListMethod<dynamic>('engines') ?? [];
+    List<dynamic> engines;
+    try {
+      engines = await system.invokeListMethod<dynamic>('engines') ?? [];
+    } on MissingPluginException {
+      // Desktops ship no system speech engines; edge TTS stays available.
+      return const [];
+    }
     final found = <SpeechVoice>[];
     for (final raw in engines) {
       if (raw is! Map || raw['id'] is! String) continue;

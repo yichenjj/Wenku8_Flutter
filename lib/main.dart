@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_ui.dart';
@@ -36,6 +37,8 @@ import 'wenku_shelf_sync.dart';
 Future<void> main() async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
   registerAppLicenses();
+  // libmpv backing for desktop listening; a no-op on mobile engines.
+  MediaKit.ensureInitialized();
   TouchSamplingPolicy(binding);
   // Do not hold the first frame while Android is applying window insets.
   unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
@@ -103,7 +106,9 @@ Future<void> main() async {
       ? CustomSpeechSettings()
       : null;
   await customSpeech?.load();
-  final listening = defaultTargetPlatform == TargetPlatform.android
+  final listening =
+      defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.linux
       ? ListeningController(
           repository: repository,
           audio: await SpeechAudioCache.forApp(

@@ -52,6 +52,8 @@ dependencies:
   tategaki: ^0.6.4
   characters: ^1.4.1
   file_selector: ^1.1.0
+  media_kit: ^1.2.6
+  media_kit_libs_audio: ^1.0.7
 
 dev_dependencies:
   flutter_test:

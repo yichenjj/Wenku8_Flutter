@@ -106,7 +106,7 @@ flutter build linux --release
 
 - 运行库补丁会把 bionic 符号版本剥掉，由应用可执行文件导出的桩（`linux/runner/android_compat.c`）补齐，密码学版本签名在进程内通过 FFI 计算。
 - 渲染默认走 Skia（Impeller 在部分 Wayland 合成器上不跟随窗口尺寸），EGL 默认锁回 Mesa 核显以规避损坏的 NVIDIA 驱动栈；均可用 `WENKU8_IMPELLER=1` / `WENKU8_NVIDIA_EGL=1` 退出。
-- 听书（TTS 播放）暂无 Linux 后端；PDF/RTF 本地导入仍在 Android 侧。
+- 听书：Edge TTS 走纯 Dart 客户端，播放用 media_kit（系统 libmpv）；系统离线 TTS 引擎仍为 Android 专属。PDF/DOCX/RTF/Kindle 本地导入暂不支持桌面版，请使用 TXT / EPUB / ZIP。
 
 
 ### GitHub Actions

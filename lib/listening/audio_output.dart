@@ -4,9 +4,11 @@ import 'dart:ui' show Color;
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'controller.dart';
+import 'media_kit_output.dart';
 import 'models.dart';
 
 /// Both online MP3 and system-generated WAV use the same hardware audio player.
@@ -120,6 +122,11 @@ class NativeListeningOutput implements ListeningAudioOutput {
 Future<ListeningAudioOutput> createListeningOutput(
   ListeningController controller,
 ) async {
+  // Desktops have neither audio_service nor just_audio; libmpv plays the
+  // synthesized clips and media commands are driven by the in-app controls.
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.linux) {
+    return MediaKitListeningOutput(controller);
+  }
   await prepareListeningService(controller);
   final output = NativeListeningOutput(controller);
   try {
