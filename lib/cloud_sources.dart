@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xml/xml.dart';
 import 'book_import_limits.dart';
 
@@ -98,9 +99,34 @@ class AndroidCloudConfigStorage implements CloudConfigStorage {
       channel.invokeMethod<void>('write', value);
 }
 
+/// Desktops have no bridge; the same encrypted-vault JSON lives in profile
+/// preferences, which the pure-Dart WebDAV clients read directly.
+class DesktopCloudConfigStorage implements CloudConfigStorage {
+  final Future<SharedPreferences> _preferences =
+      SharedPreferences.getInstance();
+
+  @override
+  Future<String?> read() async =>
+      (await _preferences).getString('wenku8.cloud.sources');
+
+  @override
+  Future<void> write(String? value) async {
+    final preferences = await _preferences;
+    if (value == null) {
+      await preferences.remove('wenku8.cloud.sources');
+    } else {
+      await preferences.setString('wenku8.cloud.sources', value);
+    }
+  }
+}
+
 class CloudSourceSettings extends ChangeNotifier {
   CloudSourceSettings({CloudConfigStorage? storage})
-    : storage = storage ?? AndroidCloudConfigStorage();
+    : storage =
+          storage ??
+          (kIsWeb || defaultTargetPlatform != TargetPlatform.linux
+              ? AndroidCloudConfigStorage()
+              : DesktopCloudConfigStorage());
   final CloudConfigStorage storage;
   final Map<CloudSourceKind, CloudSourceConfig> _configs = {};
   Future<void> _writes = Future.value();

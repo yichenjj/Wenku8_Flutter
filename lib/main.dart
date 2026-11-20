@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app_ui.dart';
 import 'app_licenses.dart';
 import 'catalog.dart';
+import 'legacy/magic_version.dart';
 import 'legacy_wenku_repository.dart';
 import 'library_state.dart';
 import 'local_books.dart';
@@ -56,9 +57,13 @@ Future<void> main() async {
       WidgetsBinding.instance.platformDispatcher.platformBrightness,
   };
   SystemChrome.setSystemUIOverlayStyle(novelSystemUiStyle(brightness));
-  final account = defaultTargetPlatform == TargetPlatform.android
-      ? WenkuAccount()
-      : null;
+  // Linux runs the same v1.30 relay protocol in Dart (lib/legacy/), so the
+  // full catalogue, account and reading flows light up without Android.
+  final usesLegacyApi =
+      defaultTargetPlatform == TargetPlatform.android ||
+          (defaultTargetPlatform == TargetPlatform.linux &&
+              MagicVersion.available);
+  final account = usesLegacyApi ? WenkuAccount() : null;
   final remote = LegacyWenkuRepository(
     publicationRequest: account?.readPublication,
     publicationSessionKey: account == null
@@ -69,7 +74,7 @@ Future<void> main() async {
             account.authenticated,
           ),
   );
-  final repository = defaultTargetPlatform == TargetPlatform.android
+  final repository = usesLegacyApi
       ? OfflineNovelRepository(
           remote: remote,
           cache: await OfflineCacheStore.forApp(),

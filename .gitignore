@@ -143,3 +143,4 @@ key.properties
 /tools/update-mirror/public/
 /tools/content-gateway/.dev.vars*
 /tools/content-gateway/.env*
+linux/proprietary/*.so

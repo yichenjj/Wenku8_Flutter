@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -21,10 +22,13 @@ class NetworkStatus extends ValueNotifier<NetworkReachability> {
   bool get offline => value == NetworkReachability.offline;
 
   Future<void> start() async {
-    if (_disposed ||
-        _subscription != null ||
-        kIsWeb ||
-        defaultTargetPlatform != TargetPlatform.android) {
+    if (_disposed || _subscription != null || kIsWeb) return;
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      if (defaultTargetPlatform == TargetPlatform.linux) {
+        // No platform connectivity service; a single reachability probe keeps
+        // the same conservative states without periodic polling.
+        unawaited(_probe());
+      }
       return;
     }
     _subscription = events.receiveBroadcastStream().listen(
@@ -39,6 +43,20 @@ class NetworkStatus extends ValueNotifier<NetworkReachability> {
       // An unavailable platform signal is unknown, never proof of no network.
     } on MissingPluginException {
       // Non-device harnesses retain their explicitly supplied initial state.
+    }
+  }
+
+  Future<void> _probe() async {
+    try {
+      final socket = await Socket.connect(
+        'wenku8-relay.mewx.org',
+        443,
+        timeout: const Duration(seconds: 4),
+      );
+      socket.destroy();
+      if (!_disposed) accept('online', initial: _revision == 0);
+    } catch (_) {
+      if (!_disposed) accept('offline', initial: _revision == 0);
     }
   }
 
