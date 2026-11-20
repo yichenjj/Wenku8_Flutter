@@ -51,6 +51,7 @@ dependencies:
   csslib: ^1.0.2
   tategaki: ^0.6.4
   characters: ^1.4.1
+  file_selector: ^1.1.0
 
 dev_dependencies:
   flutter_test:
