@@ -10,7 +10,10 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'book_docx_import.dart';
 import 'book_import_limits.dart';
+import 'book_mobi_import.dart';
+import 'book_pdf_import.dart';
 import 'legacy/gbk_codec.dart';
 
 /// Linux implementation of the book-documents contract. There is no SAF: a
@@ -340,7 +343,19 @@ class DesktopBookDocuments {
     final kind = name.split('.').last.toLowerCase();
     if (kind == 'zip') return _unpack(name, source);
     if (_kindle.contains(kind)) {
-      throw const FormatException('Kindle 格式暂不支持桌面版，请先转换为 EPUB');
+      return _convert(name, source, (work, output) {
+        BookMobiImport(work).convert(source, output);
+      });
+    }
+    if (kind == 'docx') {
+      return _convert(name, source, (work, output) {
+        BookDocxImport(work).convert(source, output);
+      });
+    }
+    if (kind == 'pdf') {
+      return _convert(name, source, (work, output) {
+        BookPdfImport(work).convert(source, output);
+      });
     }
     if (_markup.contains(kind)) {
       throw const FormatException('该文档格式暂不支持桌面版，请使用 TXT / EPUB / ZIP');
@@ -348,6 +363,48 @@ class DesktopBookDocuments {
     return [
       {'name': name, 'path': path},
     ];
+  }
+
+  /// Runs a format converter into the staging area, mirroring the Android
+  /// `convert()` contract: the result keeps its original stem with an .epub
+  /// extension, and failures clean up both the work directory and the output.
+  Future<List<Map<String, dynamic>>> _convert(
+    String name,
+    File source,
+    void Function(Directory work, File output) run,
+  ) async {
+    final staging = await _stagingRoot;
+    final work = Directory(
+      '${staging.path}/convert-${_token()}',
+    )..createSync(recursive: true);
+    final output = await _stagedFile();
+    try {
+      run(work, output);
+      if (!output.existsSync() || output.lengthSync() == 0) {
+        throw const FormatException('文件为空，请重新下载原书');
+      }
+      return [
+        {
+          'name':
+              '${name.substring(0, name.lastIndexOf('.'))}.epub',
+          'path': output.path,
+        },
+      ];
+    } on FormatException {
+      _cleanupConversion(work, output);
+      rethrow;
+    } catch (_) {
+      _cleanupConversion(work, output);
+      throw const FormatException('无法读取该文件，请检查文件是否损坏');
+    } finally {
+      try {
+        work.deleteSync(recursive: true);
+      } catch (_) {}
+    }
+  }
+
+  void _cleanupConversion(Directory work, File output) {
+    if (output.existsSync()) output.deleteSync();
   }
 
   Future<List<Map<String, dynamic>>> _unpack(

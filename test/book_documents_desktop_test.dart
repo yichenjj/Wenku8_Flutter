@@ -116,14 +116,24 @@ void main() {
       () async {
     await seedLibrary();
     final documents = DesktopBookDocuments();
+    // FB2/HTML/Markdown/RTF still have no desktop converter.
+    final fb2 = File('${library.path}/龙族.fb2')
+      ..writeAsBytesSync([1, 2, 3, 4]);
+    try {
+      await documents.prepareBook('龙族.fb2', fb2.path);
+      fail('expected a rejection');
+    } on FormatException catch (failure) {
+      expect(failure.message, contains('桌面版'));
+    }
+    // Kindle formats now convert; corrupt payloads surface the converter
+    // error instead of a blanket "unsupported".
     final mobi = File('${library.path}/龙族.mobi')
       ..writeAsBytesSync([1, 2, 3, 4]);
-
     try {
       await documents.prepareBook('龙族.mobi', mobi.path);
       fail('expected a rejection');
     } on FormatException catch (failure) {
-      expect(failure.message, contains('桌面版'));
+      expect(failure.message, contains('MOBI 文件损坏或格式不受支持'));
     }
   });
 }
