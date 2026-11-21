@@ -1,0 +1,70 @@
+# Linux desktop build for the fork.
+#
+# The legacy API runtime (libcpp.so) is proprietary and never lives in the
+# repository: the job injects it at build time from the upstream release APK
+# — the same "binary injection, source stays clean" policy upstream uses for
+# its Android APKs — and the patched copy lands in the bundle via the
+# linux/CMakeLists.txt install rule. Without the injection the build still
+# succeeds and the app degrades to demo mode.
+name: linux
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+          cache: true
+
+      - name: Install GTK build dependencies
+        run: >
+          sudo apt-get update &&
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+
+      - name: Inject the proprietary legacy runtime
+        run: |
+          APK_URL=$(curl -s https://api.github.com/repos/P5UEDGK/Wenku8_Flutter/releases/latest \
+            | jq -r '.assets[] | select(.name | test("x86_64.*apk$")) | .browser_download_url' | head -n1)
+          echo "Fetching $APK_URL"
+          curl -sL "$APK_URL" -o upstream.apk
+          unzip -j -o upstream.apk 'lib/x86_64/libcpp.so' -d /tmp/libcpp
+          python3 linux/patch_libcpp.py /tmp/libcpp/libcpp.so linux/proprietary/libcpp_patched.so
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: Run the test suite
+        # The upstream typography suite is flaky; one retry before failing.
+        run: |
+          flutter test || flutter test
+
+      - name: Build the Linux bundle
+        run: flutter build linux --release
+
+      - name: Package
+        run: tar -C build/linux/x64/release/bundle -czf wenku8-linux-x64.tar.gz .
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wenku8-linux-x64
+          path: wenku8-linux-x64.tar.gz
+
+      - name: Attach to the release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: gh release upload "$GITHUB_REF_NAME" wenku8-linux-x64.tar.gz --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
