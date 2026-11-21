@@ -41,6 +41,9 @@ jobs:
           echo "Fetching $APK_URL"
           curl -sL "$APK_URL" -o upstream.apk
           unzip -j -o upstream.apk 'lib/x86_64/libcpp.so' -d /tmp/libcpp
+          # linux/proprietary/ is empty in git (the runtime is gitignored),
+          # so the checkout has no such directory yet.
+          mkdir -p linux/proprietary
           python3 linux/patch_libcpp.py /tmp/libcpp/libcpp.so linux/proprietary/libcpp_patched.so
 
       - name: flutter pub get
