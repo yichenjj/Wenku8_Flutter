@@ -11,6 +11,7 @@ import 'package:wenku8_flutter/legacy_cover.dart';
 import 'package:wenku8_flutter/library_state.dart';
 import 'package:wenku8_flutter/novel_feed_controller.dart';
 import 'package:wenku8_flutter/pages.dart';
+import 'package:wenku8_flutter/performance_preferences.dart';
 
 import 'support/cover_fixture.dart';
 
@@ -363,6 +364,91 @@ testWidgets('mouse wheel steps exactly one book per notch without shift',
   );
   await tester.pumpAndSettle();
   expect(_scene(tester).debugFocus.round(), before);
+
+  expect(tester.takeException(), isNull);
+  await tester.pumpWidget(const SizedBox.shrink());
+});
+
+testWidgets('flat carousel wheel steps one page per notch without shift',
+    (tester) async {
+  _view(tester);
+  // Everything enabled except the 3D shelf → the flat PageView fallback.
+  const flatPreferences = PerformancePreferences(
+    enabled: true,
+    effects: {
+      PerformanceEffect.glass,
+      PerformanceEffect.blur,
+      PerformanceEffect.edgeBlur,
+      PerformanceEffect.motion,
+    },
+  );
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: novelTheme(Brightness.light),
+      home: PerformanceScope(
+        preferences: flatPreferences,
+        child: Scaffold(
+          body: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: ArchiveFileCarousel(
+                books: _books(975000, 10),
+                onOpen: (_, _) {},
+                animateEntrance: true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  expect(find.byKey(const ValueKey('archive-flat-carousel')), findsOneWidget);
+
+  final pages =
+      tester
+          .state<ScrollableState>(
+            find.descendant(
+              of: find.byKey(const ValueKey('archive-flat-carousel')),
+              matching: find.byType(Scrollable),
+            ),
+          )
+          .position;
+  final pageExtent = pages.viewportDimension * .62;
+  final before = pages.pixels;
+
+  final pointer = TestPointer(1, PointerDeviceKind.mouse);
+  pointer.hover(
+    tester.getCenter(find.byKey(const ValueKey('archive-flat-carousel'))),
+  );
+  // One notch carries ~120 px — several cover widths — yet steps one page.
+  await tester.sendEventToBinding(pointer.scroll(const Offset(0, 120)));
+  await tester.pumpAndSettle();
+  expect(pages.pixels, closeTo(before + pageExtent, 1));
+
+  // A same-notch burst folds into the single step; a later notch steps again.
+  await tester.sendEventToBinding(pointer.scroll(const Offset(0, 120)));
+  await tester.pumpAndSettle();
+  expect(pages.pixels, closeTo(before + pageExtent, 1));
+  await tester.sendEventToBinding(
+    pointer.scroll(const Offset(0, 120), timeStamp: const Duration(seconds: 1)),
+  );
+  await tester.pumpAndSettle();
+  expect(pages.pixels, closeTo(before + 2 * pageExtent, 1));
+
+  // The outer vertical feed never scrolled instead.
+  expect(
+    tester
+        .state<ScrollableState>(
+          find.ancestor(
+            of: find.byKey(const ValueKey('archive-flat-carousel')),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position
+        .pixels,
+    0,
+  );
 
   expect(tester.takeException(), isNull);
   await tester.pumpWidget(const SizedBox.shrink());

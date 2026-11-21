@@ -562,93 +562,124 @@ class _FlatArchiveCarouselState extends State<_FlatArchiveCarousel> {
     super.dispose();
   }
 
+  /// Same wheel contract as the 3D shelf above: one book per notch without
+  /// Shift, resolver-first so the outer vertical feed never scrolls instead,
+  /// and an event-time cooldown that folds trackpad bursts into one step.
+  static const _wheelCooldown = Duration(milliseconds: 140);
+  Duration? _lastWheelStep;
+  void _handleWheelSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || widget.books.length < 2) return;
+    final delta = event.scrollDelta.dy == 0
+        ? event.scrollDelta.dx
+        : event.scrollDelta.dy;
+    if (delta == 0) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      if (_lastWheelStep != null &&
+          event.timeStamp - _lastWheelStep! < _wheelCooldown) {
+        return;
+      }
+      _lastWheelStep = event.timeStamp;
+      final page = _pages.hasClients ? _pages.page!.round() : _start;
+      unawaited(
+        _pages.animateToPage(
+          page + (delta > 0 ? 1 : -1),
+          duration: NovelMotion.enter,
+          curve: const Cubic(.2, 1.06, .35, 1),
+        ),
+      );
+    });
+  }
+
   @override
-  Widget build(BuildContext context) => SizedBox(
-    key: const ValueKey('archive-flat-carousel'),
-    height: 300,
-    child: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
-        child: PageView.builder(
-          controller: _pages,
-          physics: widget.books.length == 1
-              ? const NeverScrollableScrollPhysics()
-              : null,
-          itemBuilder: (context, index) {
-            final book = widget.books[index % widget.books.length];
-            final tag = (_heroSource, index, book.id);
-            return Semantics(
-              label: '${book.title}，${book.author}',
-              button: true,
-              child: GestureDetector(
-                onTap: () => widget.onOpen(book, tag),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Center(
-                          child: FittedBox(
-                            fit: BoxFit.contain,
-                            child: Stack(
-                              children: [
-                                NovelCover(
-                                  book,
-                                  width: 154,
-                                  height: 220,
-                                  heroTag: tag,
-                                ),
-                                if (widget.sourceLabel?.call(book)
-                                    case final label?)
-                                  Positioned(
-                                    top: 5,
-                                    right: 5,
-                                    child: BookSourceBadge(label),
+  Widget build(BuildContext context) => Listener(
+    onPointerSignal: _handleWheelSignal,
+    child: SizedBox(
+      key: const ValueKey('archive-flat-carousel'),
+      height: 300,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: PageView.builder(
+            controller: _pages,
+            physics: widget.books.length == 1
+                ? const NeverScrollableScrollPhysics()
+                : null,
+            itemBuilder: (context, index) {
+              final book = widget.books[index % widget.books.length];
+              final tag = (_heroSource, index, book.id);
+              return Semantics(
+                label: '${book.title}，${book.author}',
+                button: true,
+                child: GestureDetector(
+                  onTap: () => widget.onOpen(book, tag),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.contain,
+                              child: Stack(
+                                children: [
+                                  NovelCover(
+                                    book,
+                                    width: 154,
+                                    height: 220,
+                                    heroTag: tag,
                                   ),
+                                  if (widget.sourceLabel?.call(book)
+                                      case final label?)
+                                    Positioned(
+                                      top: 5,
+                                      right: 5,
+                                      child: BookSourceBadge(label),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Center(
+                          child: SizedBox(
+                            width: 154,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                AppText(
+                                  book.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.4,
+                                  ),
+                                ),
+                                AppText(
+                                  book.author,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Center(
-                        child: SizedBox(
-                          width: 154,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              AppText(
-                                book.title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.4,
-                                ),
-                              ),
-                              AppText(
-                                book.author,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
+                        const SizedBox(height: 8),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     ),
