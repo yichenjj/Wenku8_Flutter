@@ -156,6 +156,20 @@ void main() {
       await tester.pumpAndSettle();
       expect(anchor().index, before.index);
       expect(anchor().fraction, closeTo(before.fraction, .02));
+      // The typeface switch lands through the system-font message channel,
+      // which schedules one relayout frame (Flutter's
+      // RelayoutWhenSystemFontsChangeMixin) once the async message handler
+      // runs. Flush the message, consume the scheduled frame, and only then
+      // dispose — teardown flags a pending transient callback otherwise.
+      // The engine reports the custom font load on the real event loop, so
+      // the fontsChange message (and the relayout frame it schedules) lands
+      // after the fake-async body. Wait for it inside the body and consume
+      // the scheduled frame — teardown would flag a pending transient
+      // callback otherwise.
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      });
+      await tester.pump();
       await tester.pumpWidget(const SizedBox.shrink());
       state.dispose();
     },
