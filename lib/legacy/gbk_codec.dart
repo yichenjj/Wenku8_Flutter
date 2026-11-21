@@ -1,11 +1,15 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'gb18030_ranges.dart';
 import 'gbk_table.dart';
 
 /// GBK support for the review encoder and the website client. The original
 /// Android runtime used the JVM charset; these tables reproduce CP936 for the
-/// two-byte range (ASCII passes through untouched).
+/// two-byte range (ASCII passes through untouched). Decoding additionally
+/// resolves four-byte GB18030 sequences (CJK extensions and beyond), while
+/// encoding stays GBK-conservative so the login/review guards keep their
+/// "server speaks GBK" semantics.
 abstract final class Gbk {
   /// Returns the GBK bytes for [text], or null when any character is outside
   /// the encoding.
@@ -32,7 +36,8 @@ abstract final class Gbk {
     return true;
   }
 
-  /// Decodes GBK bytes; invalid or four-byte GB18030 sequences become U+FFFD.
+  /// Decodes GBK bytes; four-byte GB18030 sequences resolve through the
+  /// linear range table and invalid bytes degrade to U+FFFD.
   static String decode(List<int> bytes) {
     final buffer = StringBuffer();
     for (var i = 0; i < bytes.length;) {
@@ -51,12 +56,25 @@ abstract final class Gbk {
         i += 2;
         continue;
       }
+      if (byte >= 0x81 && byte <= 0xfe && second >= 0x30 && second <= 0x39) {
+        // Four-byte GB18030 sequence; a truncated or mis-shaped tail still
+        // consumes the whole shape so stray bytes never re-parse as text.
+        final third = i + 2 < bytes.length ? bytes[i + 2] : -1;
+        final fourth = i + 3 < bytes.length ? bytes[i + 3] : -1;
+        if (third >= 0x81 && third <= 0xfe && fourth >= 0x30 && fourth <= 0x39) {
+          final index = (byte - 0x81) * 12600 +
+              (second - 0x30) * 1260 +
+              (third - 0x81) * 10 +
+              (fourth - 0x30);
+          buffer.writeCharCode(_fourByteDecode(index) ?? 0xfffd);
+        } else {
+          buffer.writeCharCode(0xfffd);
+        }
+        i += 4;
+        continue;
+      }
       buffer.writeCharCode(0xfffd);
-      // Four-byte GB18030 sequences consume three trailing bytes; anything
-      // else is a stray byte.
-      i += byte >= 0x81 && byte <= 0xfe && second >= 0x30 && second <= 0x39
-          ? 4
-          : 1;
+      i++;
     }
     return buffer.toString();
   }
@@ -94,6 +112,27 @@ abstract final class Gbk {
   static int? _encodeOne(int unit) => _lookup(gbkEncodeTable, unit << 16);
 
   static int? _decodeOne(int gbk) => _lookup(gbkDecodeTable, gbk << 16);
+
+  /// Four-byte linear index -> code point, or null for the unmapped holes.
+  static int? _fourByteDecode(int index) {
+    final ranges = gb18030FourByteRanges;
+    var low = 0;
+    var high = ranges.length ~/ 3 - 1;
+    while (low <= high) {
+      final mid = (low + high) >> 1;
+      final base = mid * 3;
+      final start = ranges[base];
+      final length = ranges[base + 2];
+      if (index < start) {
+        high = mid - 1;
+      } else if (index >= start + length) {
+        low = mid + 1;
+      } else {
+        return ranges[base + 1] + (index - start);
+      }
+    }
+    return null;
+  }
 
   /// Entries are packed `(key << 16 | value)` and sorted by key; [probe]
   /// supplies the shifted key.
